@@ -1,16 +1,15 @@
 {
-  "buildCommand": "pip install -r requirements.txt",
-  "outputDirectory": ".",
-  "framework": "fastapi",
+  "version": 2,
+  "builds": [
+    {
+      "src": "api/index.py",
+      "use": "@vercel/python"
+    }
+  ],
   "routes": [
     {
       "src": "/(.*)",
       "dest": "api/index.py"
     }
-  ],
-  "build": {
-    "env": {
-      "PYTHONUNBUFFERED": "1"
-    }
-  }
+  ]
 }

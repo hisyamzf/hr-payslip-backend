@@ -25,8 +25,11 @@ pycparser==3.0
 pydantic==2.12.5
 pydantic-core==2.41.5
 pydyf==0.12.1
+PyJWT==2.10.1
 pyphen==0.17.2
 python-dotenv==1.2.2
+python-multipart==0.0.22
+reportlab==4.4.10
 requests==2.33.0
 SQLAlchemy==2.0.48
 starlette==1.0.0
