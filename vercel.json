@@ -1,0 +1,16 @@
+{
+  "buildCommand": "pip install -r requirements.txt",
+  "outputDirectory": ".",
+  "framework": "fastapi",
+  "routes": [
+    {
+      "src": "/(.*)",
+      "dest": "api/index.py"
+    }
+  ],
+  "build": {
+    "env": {
+      "PYTHONUNBUFFERED": "1"
+    }
+  }
+}
