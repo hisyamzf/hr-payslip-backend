@@ -8,10 +8,13 @@ RUN apt-get update && apt-get install -y \
     libffi-dev \
     shared-mime-info \
     fonts-liberation \
-    libimagequant0 \
-    libjpeg-turbo \
-    libdeflate0 \
-    libopenjp2-7 \
+    libcairo2 \
+    libpangoft2-1.0-0 \
+    libharfbuzz0b \
+    libfreetype6 \
+    libpng16-16 \
+    libjpeg8 \
+    libtiff6 \
     libwebp7 \
     && rm -rf /var/lib/apt/lists/*
 
