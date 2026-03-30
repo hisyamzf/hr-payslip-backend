@@ -299,6 +299,10 @@ def get_upload_preview(
         raise HTTPException(status_code=404, detail="Upload session not found")
     
     try:
+        # Default to "Benefit" sheet if no sheet specified
+        if not sheet:
+            sheet = "Benefit"
+        
         logger.info(f"Preview params - rows: {rows}, sheet: {sheet}")
         parser = ExcelParser()
         headers, sample_rows = parser.get_preview(upload_session.file_path, max_rows=rows, sheet_name=sheet)
