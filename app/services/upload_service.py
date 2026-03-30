@@ -178,11 +178,11 @@ class UploadService:
                 self.session.flush()  # Get generated IDs
                 logger.info(f"Inserted {len(inserted_payslips)} payslips")
                 
-                # Queue PDF generation for successful payslips
+                # Generate PDF synchronously for successful payslips
                 try:
-                    self._queue_pdf_generation(inserted_payslips)
+                    self._generate_pdfs_sync(inserted_payslips)
                 except Exception as e:
-                    logger.warning(f"⚠️  PDF generation queue error (non-blocking): {str(e)}")
+                    logger.warning(f"⚠️  PDF generation error (non-blocking): {str(e)}")
 
                 # Mapping employee_number dari row_data ke payslip.id
                 emp_to_payslip_id = {
@@ -303,6 +303,88 @@ class UploadService:
             logger.warning(f"⚠️  Error in PDF queue: {str(e)}")
             return None
     
+    def _generate_pdfs_sync(self, inserted_payslips: list):
+        """
+        Generate PDF synchronously for all inserted payslips
+        """
+        try:
+            from app.services.pdf_service import PayslipPDFService
+            from app.repositories.employee_repository import EmployeeRepository
+            
+            pdf_service = PayslipPDFService()
+            employee_repo = EmployeeRepository(self.session)
+            
+            for payslip in inserted_payslips:
+                try:
+                    logger.info(f"Generating PDF for payslip {payslip.id}")
+                    
+                    # Get employee data
+                    employee = employee_repo.get_by_id(payslip.employee_id)
+                    if not employee:
+                        logger.warning(f"Employee not found for payslip {payslip.id}")
+                        continue
+                    
+                    # Get company data
+                    company = payslip.company_id
+                    
+                    # Get earnings and deductions from payslip JSON
+                    earnings = payslip.earnings_json or {}
+                    deductions = payslip.deductions_json or {}
+                    
+                    # Generate PDF
+                    pdf_bytes = pdf_service.generate_payslip_pdf(
+                        employee_id=employee.employee_number,
+                        employee_name=employee.first_name or '',
+                        employee_department=employee.department or '',
+                        employee_position=employee.position or '',
+                        employee_join_date=employee.join_date,
+                        employee_bank_account=employee.bank_account,
+                        company_name=company.name if company else "Company",
+                        period_start=payslip.period_start,
+                        period_end=payslip.period_end,
+                        payment_date=payslip.payment_date,
+                        earnings=earnings,
+                        deductions=deductions,
+                        total_earnings=payslip.gross_salary or 0,
+                        total_deductions=payslip.total_deduction or 0,
+                        net_salary=payslip.net_salary or 0,
+                    )
+                    
+                    # Save PDF to storage (Supabase)
+                    if pdf_bytes:
+                        pdf_url = self._save_pdf_to_storage(payslip.id, pdf_bytes)
+                        if pdf_url:
+                            payslip.pdf_url = pdf_url
+                            payslip.status = 'completed'
+                            self.session.commit()
+                            logger.info(f"✅ PDF generated for payslip {payslip.id}")
+                except Exception as e:
+                    logger.warning(f"⚠️  Error generating PDF for payslip {payslip.id}: {str(e)}")
+                    continue
+            
+            logger.info(f"✅ Generated PDFs for {len(inserted_payslips)} payslips")
+        except Exception as e:
+            logger.warning(f"⚠️  Error in sync PDF generation: {str(e)}")
+    
+    def _save_pdf_to_storage(self, payslip_id, pdf_bytes: bytes) -> str:
+        """Save PDF to Supabase storage"""
+        try:
+            from app.utils.supabase_client import get_supabase_client
+            supabase = get_supabase_client()
+            
+            file_name = f"payslips/{payslip_id}.pdf"
+            supabase.storage.from_("payslips").upload(
+                file_name,
+                pdf_bytes,
+                {"content-type": "application/pdf", "x-upsert": "true"}
+            )
+            
+            public_url = supabase.storage.from_("payslips").get_public_url(file_name)
+            return public_url
+        except Exception as e:
+            logger.warning(f"⚠️  Error saving PDF to storage: {str(e)}")
+            return None
+    
     def process_reprocess(
         self,
         child_session_id: UUID,
@@ -378,9 +460,9 @@ class UploadService:
                 self.session.flush()
                 
                 try:
-                    self._queue_pdf_generation(inserted_payslips)
+                    self._generate_pdfs_sync(inserted_payslips)
                 except Exception as e:
-                    logger.warning(f"⚠️  PDF generation queue error (non-blocking): {str(e)}")
+                    logger.warning(f"⚠️  PDF generation error (non-blocking): {str(e)}")
                 
                 emp_to_payslip_id = {
                     row_data.get('employee_number'): p.id 
