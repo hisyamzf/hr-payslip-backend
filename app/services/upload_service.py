@@ -328,8 +328,8 @@ class UploadService:
                     company = payslip.company_id
                     
                     # Get earnings and deductions from payslip JSON
-                    earnings = payslip.earnings_json or {}
-                    deductions = payslip.deductions_json or {}
+                    earnings = payslip.earnings or {}
+                    deductions = payslip.deductions or {}
                     
                     # Generate PDF
                     pdf_bytes = pdf_service.generate_payslip_pdf(
@@ -354,7 +354,7 @@ class UploadService:
                     if pdf_bytes:
                         pdf_url = self._save_pdf_to_storage(payslip.id, pdf_bytes)
                         if pdf_url:
-                            payslip.pdf_url = pdf_url
+                            payslip.file_url = pdf_url
                             payslip.status = 'completed'
                             self.session.commit()
                             logger.info(f"✅ PDF generated for payslip {payslip.id}")
