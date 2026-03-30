@@ -42,4 +42,3 @@ uvicorn==0.42.0
 weasyprint==68.1
 webencodings==0.5.1
 zopfli==0.4.1
-vercel-fastapi==0.0.6
