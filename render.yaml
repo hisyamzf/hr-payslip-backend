@@ -1,0 +1,11 @@
+{
+  "name": "hr-payslip-backend",
+  "region": "singapore",
+  "builder": "docker",
+  "dockerfile": "Dockerfile",
+  "env": {
+    "PDF_MOCK_MODE": {
+      "fromService": false
+    }
+  }
+}
