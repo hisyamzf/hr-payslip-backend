@@ -36,8 +36,8 @@ else:
 
 class ColumnMappingRequest(BaseModel):
     fixed_columns: dict
-    earnings: list
-    deductions: list
+    earnings: dict  # {"sheet_name": "Benefit", "columns": [...]}
+    deductions: dict  # {"sheet_name": "Deduction", "columns": [...]}
     ignored_columns: Optional[list] = []
     start_row: Optional[int] = 2
 
