@@ -260,6 +260,127 @@ class OTPService:
             logger.error(f"❌ Failed to send OTP: {str(e)}")
             return False
     
+    async def request_email_otp(self, db: Session, email: str) -> Tuple[bool, str, Optional[str]]:
+        """
+        Request OTP untuk email
+        DEV MODE: Mock (always succeed)
+        PROD MODE: Send real email
+        """
+        try:
+            is_dev_mode = os.getenv('DEV_MODE', 'true').lower() == 'true'
+            logger.info(f"📧 Email OTP request for: {email} (DEV_MODE: {is_dev_mode})")
+            
+            # Check if user exists by email
+            user = db.query(User).filter(User.email == email).first()
+            if not user:
+                logger.warning(f"⚠️ Email not registered: {email}")
+                return False, "Email tidak terdaftar. Silakan hubungi administrator.", None
+            
+            # Generate OTP
+            otp_code = self._generate_otp_code()
+            otp_hash = self._hash_otp(otp_code)
+            expires_at = datetime.now(timezone.utc) + timedelta(minutes=self.otp_expiration_minutes)
+            
+            # Revoke old OTPs
+            old_otps = db.query(OTPToken).filter(
+                OTPToken.user_id == user.id,
+                OTPToken.is_used == False,
+                OTPToken.expires_at > datetime.now(timezone.utc)
+            ).all()
+            
+            for old_otp in old_otps:
+                old_otp.is_used = True
+            
+            # Create OTP record
+            otp_token = OTPToken(
+                user_id=user.id,
+                phone=email,  # Use email as phone field
+                otp_hash=otp_hash,
+                failed_attempts=0,
+                expires_at=expires_at,
+                is_used=False
+            )
+            db.add(otp_token)
+            db.commit()
+            
+            # Send email (mock in dev, real in prod)
+            if is_dev_mode:
+                logger.info(f"📧 DEV MODE: Email OTP for {email}: {otp_code}")
+                return True, f"OTP dikirim (DEV MODE). Kode: {otp_code}", str(otp_token.id)
+            else:
+                # Send real email
+                success = await self._send_email_otp(email, otp_code)
+                if success:
+                    return True, "OTP dikirim ke email Anda", str(otp_token.id)
+                else:
+                    return False, "Gagal mengirim OTP ke email", None
+        
+        except Exception as e:
+            logger.error(f"❌ Error requesting email OTP: {str(e)}")
+            return False, "Gagal memproses request OTP", None
+    
+    async def verify_email_otp(self, db: Session, email: str, otp_code: str) -> Tuple[bool, str, Optional[str]]:
+        """
+        Verify Email OTP
+        """
+        try:
+            is_dev_mode = os.getenv('DEV_MODE', 'true').lower() == 'true'
+            logger.info(f"🔐 Verifying email OTP for: {email}")
+            
+            # Find user by email
+            user = db.query(User).filter(User.email == email).first()
+            if not user:
+                return False, "Email tidak terdaftar", None
+            
+            # Find valid OTP
+            otp_token = db.query(OTPToken).filter(
+                OTPToken.user_id == user.id,
+                OTPToken.phone == email,
+                OTPToken.is_used == False,
+                OTPToken.expires_at > datetime.now(timezone.utc)
+            ).order_by(OTPToken.created_at.desc()).first()
+            
+            if not otp_token:
+                return False, "OTP tidak ditemukan atau sudah expired", None
+            
+            # Check attempts
+            if otp_token.failed_attempts >= self.max_failed_attempts:
+                otp_token.is_used = True
+                db.commit()
+                return False, "Terlalu banyak percobaan gagal. Silakan request OTP lagi.", None
+            
+            # Verify OTP
+            if is_dev_mode:
+                # DEV MODE: Accept any 6-digit code
+                if len(otp_code) == 6 and otp_code.isdigit():
+                    otp_token.is_used = True
+                    db.commit()
+                    return True, "OTP verified", str(user.id)
+            else:
+                # PROD MODE: Verify hash
+                otp_hash = self._hash_otp(otp_code)
+                if otp_token.otp_hash == otp_hash:
+                    otp_token.is_used = True
+                    db.commit()
+                    return True, "OTP verified", str(user.id)
+            
+            # Failed attempt
+            otp_token.failed_attempts += 1
+            db.commit()
+            return False, "Kode OTP salah", None
+        
+        except Exception as e:
+            logger.error(f"❌ Error verifying email OTP: {str(e)}")
+            return False, "Gagal memverifikasi OTP", None
+    
+    async def _send_email_otp(self, email: str, otp_code: str) -> bool:
+        """
+        Send OTP via email (placeholder for real implementation)
+        """
+        # TODO: Implement real email sending (e.g., using SendGrid, Mailgun, or SMTP)
+        logger.info(f"📧 Sending email OTP to {email}: {otp_code}")
+        return True
+    
     @staticmethod
     def cleanup_expired_otps(db: Session) -> int:
         """

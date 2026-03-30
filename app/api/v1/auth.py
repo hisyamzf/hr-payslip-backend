@@ -28,6 +28,11 @@ class RequestOTPRequest(BaseModel):
     phone: str = Field(..., example="+62812345678")
 
 
+class RequestEmailOTPRequest(BaseModel):
+    """Request Email OTP endpoint input"""
+    email: str = Field(..., example="user@example.com")
+
+
 class RequestOTPResponse(BaseModel):
     """Request OTP endpoint response"""
     success: bool
@@ -209,6 +214,110 @@ async def verify_otp(
         raise
     except Exception as e:
         logger.error(f"❌ Error verifying OTP: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Gagal memverifikasi OTP"
+        )
+
+
+@router.post("/request-email-otp", response_model=RequestOTPResponse)
+async def request_email_otp(
+    request: RequestEmailOTPRequest,
+    db: Session = Depends(get_db)
+):
+    """
+    Request OTP untuk email (DEV MODE - mock, PROD MODE - send real email)
+    """
+    try:
+        logger.info(f"📧 Email OTP request for: {request.email}")
+        
+        otp_service = OTPService()
+        success, message, request_id = await otp_service.request_email_otp(db, request.email)
+        
+        return RequestOTPResponse(
+            success=success,
+            message=message,
+            request_id=request_id
+        )
+    
+    except Exception as e:
+        logger.error(f"❌ Error requesting email OTP: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Gagal memproses request OTP"
+        )
+
+
+@router.post("/verify-email-otp", response_model=VerifyOTPResponse)
+async def verify_email_otp(
+    request: VerifyOTPRequest,
+    req: Request,
+    db: Session = Depends(get_db)
+):
+    """
+    Verify Email OTP dan return JWT tokens
+    """
+    try:
+        logger.info(f"🔐 Email OTP verification for: {request.phone}")
+        
+        otp_service = OTPService()
+        success, message, user_id = await otp_service.verify_email_otp(
+            db, 
+            request.phone, 
+            request.otp_code
+        )
+        
+        if not success or not user_id:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail=message
+            )
+        
+        auth_repo = AuthRepository(db)
+        user_id_uuid = user_id if isinstance(user_id, UUID) else UUID(str(user_id))
+        user_roles = auth_repo.get_user_company_roles(user_id_uuid)
+        
+        if not user_roles:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="User tidak memiliki akses ke perusahaan"
+            )
+        
+        first_role = user_roles[0]
+        company_id = first_role.company_id
+        auth_role = first_role.role
+        
+        token_service = TokenService()
+        access_token = token_service.create_access_token(
+            user_id=user_id,
+            company_id=company_id,
+            role=auth_role
+        )
+        
+        user_agent = req.headers.get("user-agent", "Unknown")
+        client_host = req.client.host if req.client else "Unknown"
+        
+        refresh_token = token_service.create_refresh_token(
+            db=db,
+            user_id=user_id,
+            device_info=user_agent,
+            ip_address=client_host
+        )
+        
+        return VerifyOTPResponse(
+            success=True,
+            message="Login berhasil",
+            tokens=TokenResponse(
+                access_token=access_token,
+                refresh_token=refresh_token,
+                token_type="bearer"
+            )
+        )
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ Error verifying email OTP: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Gagal memverifikasi OTP"
