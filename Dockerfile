@@ -9,8 +9,7 @@ RUN apt-get update && apt-get install -y \
     shared-mime-info \
     fonts-liberation \
     libimagequant0 \
-    libraqm-0.10-0 \
-    libjpeg62-turbo \
+    libjpeg-turbo \
     libdeflate0 \
     libopenjp2-7 \
     libwebp7 \
