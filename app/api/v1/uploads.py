@@ -24,8 +24,14 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/companies", tags=["uploads"])
 
-UPLOAD_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "uploads")
-os.makedirs(UPLOAD_DIR, exist_ok=True)
+UPLOAD_DIR = os.environ.get("VERCEL") and "/tmp/uploads" or os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "uploads")
+if os.environ.get("VERCEL"):
+    os.makedirs(UPLOAD_DIR, exist_ok=True)
+else:
+    try:
+        os.makedirs(UPLOAD_DIR, exist_ok=True)
+    except OSError:
+        pass
 
 
 class ColumnMappingRequest(BaseModel):
